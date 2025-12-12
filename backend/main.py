@@ -7,19 +7,20 @@ from minio.error import S3Error
 
 app = FastAPI(title="Cloud Analytics Service")
 
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
-ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
-SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
-BUCKET_NAME = os.getenv("MINIO_BUCKET")
+MINIO_ENDPOINT = os.getenv("MINIO_INTERNAL_ENDPOINT")
+ACCESS_KEY = os.getenv("MINIO_ROOT_KEY")
+SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD")
+BUCKET_NAME = os.getenv("MINIO_DEFAULT_BUCKET")
 
-client = Minio(
-    MINIO_ENDPOINT,
-    access_key=ACCESS_KEY,
-    secret_key=SECRET_KEY,
-    secure=False # No HTTPS 
-)
+
 
 try:
+    client = Minio(
+        MINIO_ENDPOINT,
+        access_key=ACCESS_KEY,
+        secret_key=SECRET_KEY,
+        secure=False # No HTTPS 
+    )
     if not client.bucket_exists(BUCKET_NAME):
         client.make_bucket(BUCKET_NAME)
         print(f"Bucket '{BUCKET_NAME}' created.")
