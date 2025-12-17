@@ -1,52 +1,50 @@
 version: '3.8'
 
 services:
-  # 1. Хранилище (MinIO)
   minio:
     image: minio/minio:latest
     container_name: cloud_storage
     ports:
-      - "9000:9000"  # API порт
-      - "9001:9001"  # WebUI порт
+      - "9000:9000"
+      - "9001:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_secret_password}
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
     networks:
       - cloud-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
-  # 2. Бэкенд (FastAPI)
   backend:
     build: ./backend
     container_name: cloud_backend
-    ports:
-      - "8000:8000"
     environment:
-      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      MINIO_BUCKET: ${MINIO_BUCKET:-datasets}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio_secret_password}
+      MINIO_BUCKET: ${MINIO_BUCKET:-analytics-data}
+      ANALYTICS_URL: http://analytics:8001
     networks:
       - cloud-network
     depends_on:
-      minio:
-        condition: service_healthy
+      - minio
 
-  # 3. Фронтенд (Streamlit)
+  analytics:
+    build: ./analytics
+    container_name: cloud_analytics
+    environment:
+      PORT: 8001
+    networks:
+      - cloud-network
+
   frontend:
     build: ./frontend
     container_name: cloud_frontend
     ports:
       - "8501:8501"
     environment:
-      BACKEND_URL: http://backend:8000
+      BACKEND_URL: http://${SERVER_IP:-localhost}:8000 # Внешний IP для браузера
     networks:
       - cloud-network
     depends_on:

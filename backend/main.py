@@ -1,13 +1,13 @@
 import os
 import io
-import pandas as pd
+import httpx
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from minio import Minio
 from minio.error import S3Error
 
-# Инициализация FastAPI
-app = FastAPI(title="Cloud Analytics Service")
+app = FastAPI(title="Cloud Gateway Backend")
+
 
 # Добавляем CORS middleware
 app.add_middleware(
@@ -24,12 +24,13 @@ MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
 MINIO_BUCKET = os.getenv("MINIO_BUCKET", "datasets")
 
-# Отладочный вывод (можно убрать в проде)
+ANALYTICS_URL = os.getenv("ANALYTICS_URL", "http://analytics:8001")
+
+# Отладочный вывод
 print(f"MinIO Endpoint: {MINIO_ENDPOINT}")
 print(f"MinIO Bucket: {MINIO_BUCKET}")
 
-# Убедитесь, что endpoint не содержит протокол
-# Minio client сам добавит http:// или https://
+
 if MINIO_ENDPOINT and MINIO_ENDPOINT.startswith("http://"):
     MINIO_ENDPOINT = MINIO_ENDPOINT.replace("http://", "")
 elif MINIO_ENDPOINT and MINIO_ENDPOINT.startswith("https://"):
@@ -54,9 +55,7 @@ try:
     print("MinIO client initialized successfully.")
     
 except Exception as e:
-    print(f"Error initializing MinIO client: {e}")
-    # В продуктиве лучше поднимать исключение
-    # raise HTTPException(status_code=500, detail=f"Storage connection failed: {e}")
+    raise HTTPException(status_code=500, detail=f"Storage connection failed: {e}")
 
 # Маршруты API
 @app.get("/")
@@ -115,26 +114,18 @@ async def upload_file(file: UploadFile = File(...)):
         stats = {}
         if file.filename.lower().endswith('.csv'):
             try:
-                df = pd.read_csv(io.BytesIO(contents))
+                async with httpx.AsyncClient() as httpx_client:
                 
-                # Базовая статистика
-                description = df.describe().to_dict() if not df.empty else {}
+                    # Пересылаем файл в микросервис аналитики
+                    files = {'file': (file.filename, contents, file.content_type)}
+                    response = await httpx_client.post(f"{ANALYTICS_URL}/analyze", files=files, timeout=10.0)
                 
-                # Дополнительная информация
-                stats = {
-                    "filename": file.filename,
-                    "rows": len(df),
-                    "columns": list(df.columns),
-                    "data_types": {col: str(dtype) for col, dtype in df.dtypes.items()},
-                    "missing_values": df.isnull().sum().to_dict(),
-                    "summary": description,
-                    "sample": df.head(5).to_dict(orient='records') if not df.empty else []
-                }
+                    if response.status_code == 200:
+                        stats = response.json()
+                    else:
+                        stats = {"error": f"Analytics service error: {response.text}"}
             except Exception as e:
-                stats = {
-                    "error": f"Could not analyze CSV: {str(e)}",
-                    "filename": file.filename
-                }
+                stats = {"error": f"Could not connect to analytics: {str(e)}"}
         
         return {
             "filename": file.filename,
