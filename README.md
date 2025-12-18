@@ -35,6 +35,7 @@
 git clone [https://github.com/Artarcadman/Cloud_analysis.git](https://github.com/Artarcadman/Cloud_analysis.git)
 cd Cloud_analysis
 touch .env
+```
 
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=minio_secret_password
